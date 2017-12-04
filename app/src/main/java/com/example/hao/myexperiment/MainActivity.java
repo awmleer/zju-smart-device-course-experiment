@@ -1,49 +1,152 @@
 package com.example.hao.myexperiment;
 
-import android.app.Activity;
-import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
+import android.hardware.Camera;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
-import android.telephony.SmsManager;
+import android.util.Log;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
-import android.widget.EditText;
-import android.widget.Toast;
+import android.view.ViewGroup;
+
+import java.io.IOException;
+import java.util.List;
 
 
 public class MainActivity extends AppCompatActivity {
-    public static final String SMS_ACTION = "com.android.TinySMS.RESULT";
+    Camera mCamera;
+    Preview mPreview;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        this.safeCameraOpen();
+        mPreview=new Preview(this);
+//        setContentView(R.layout.activity_main);
+        setContentView(mPreview);
     }
 
-    private SentReceiver receiver = new SentReceiver();
+    private boolean safeCameraOpen() {
+        boolean qOpened = false;
 
-    public void onStartClicked(View v){
-        EditText addressView = findViewById(R.id.editText);
-        EditText contentView = findViewById(R.id.editText2);
-        this.sendSMS(addressView.getText().toString(),contentView.getText().toString());
+        try {
+            releaseCameraAndPreview();
+            mCamera = Camera.open();
+            qOpened = (mCamera != null);
+        } catch (Exception e) {
+            Log.e(getString(R.string.app_name), "failed to open Camera");
+            e.printStackTrace();
+        }
+
+        return qOpened;
     }
 
-    private class SentReceiver extends BroadcastReceiver {
-        @Override public void onReceive(Context context, Intent intent) {
-            if (intent.getAction().equals(SMS_ACTION)) {
-                int code = getResultCode(); //短消息发送成功
-                if(code == Activity.RESULT_OK) Toast.makeText(MainActivity.this, "发送成功", Toast.LENGTH_SHORT).show();
-            }
+    private void releaseCameraAndPreview() {
+        mPreview.setCamera(null);
+        if (mCamera != null) {
+            mCamera.release();
+            mCamera = null;
         }
     }
 
-    private void sendSMS(String address, String content) {
-        SmsManager manager = SmsManager.getDefault();
-        Intent i = new Intent(SMS_ACTION); //生成PendingIntent，当消息发送完成，接收到广播
-        PendingIntent sentIntent = PendingIntent.getBroadcast(this, 0, i, PendingIntent.FLAG_ONE_SHOT);
-        manager.sendTextMessage( address, null, content, sentIntent, null);
+    public void onStartClicked(View v){
+
+    }
+
+
+    class Preview extends ViewGroup implements SurfaceHolder.Callback {
+
+        SurfaceView mSurfaceView;
+        SurfaceHolder mHolder;
+        List<Camera.Size> mSupportedPreviewSizes;
+
+        Preview(Context context) {
+            super(context);
+
+            mSurfaceView = new SurfaceView(context);
+            addView(mSurfaceView);
+
+            // Install a SurfaceHolder.Callback so we get notified when the
+            // underlying surface is created and destroyed.
+            mHolder = mSurfaceView.getHolder();
+            mHolder.addCallback(this);
+            mHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+        }
+
+        @Override
+        protected void onLayout(boolean b, int i, int i1, int i2, int i3) {
+
+        }
+
+        @Override
+        public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
+            // Now that the size is known, set up the camera parameters and begin
+            // the preview.
+//            Camera.Size mPreviewSize=mSupportedPreviewSizes.get(0);
+//            Camera.Parameters parameters = mCamera.getParameters();
+//            parameters.setPreviewSize(mPreviewSize.width, mPreviewSize.height);
+//            requestLayout();
+//            mCamera.setParameters(parameters);
+
+            // Important: Call startPreview() to start updating the preview surface.
+            // Preview must be started before you can take a picture.
+            mCamera.startPreview();
+        }
+
+
+        public void surfaceDestroyed(SurfaceHolder holder) {
+            // Surface will be destroyed when we return, so stop the preview.
+            if (mCamera != null) {
+                // Call stopPreview() to stop updating the preview surface.
+                mCamera.stopPreview();
+            }
+        }
+
+        private void stopPreviewAndFreeCamera() {
+
+            if (mCamera != null) {
+                // Call stopPreview() to stop updating the preview surface.
+                mCamera.stopPreview();
+
+                // Important: Call release() to release the camera for use by other
+                // applications. Applications should release the camera immediately
+                // during onPause() and re-open() it during onResume()).
+                mCamera.release();
+
+                mCamera = null;
+            }
+        }
+
+        @Override
+        public void surfaceCreated(SurfaceHolder surfaceHolder) {
+
+        }
+
+        public void setCamera(Camera camera) {
+            if (mCamera == camera) { return; }
+
+            stopPreviewAndFreeCamera();
+
+            mCamera = camera;
+
+            if (mCamera != null) {
+                List<Camera.Size> localSizes = mCamera.getParameters().getSupportedPreviewSizes();
+                mSupportedPreviewSizes = localSizes;
+                requestLayout();
+
+                try {
+                    mCamera.setPreviewDisplay(mHolder);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+                // Important: Call startPreview() to start updating the preview
+                // surface. Preview must be started before you can take a picture.
+                mCamera.startPreview();
+            }
+        }
+
     }
 
 
